@@ -1,0 +1,38 @@
+[
+  {
+    "date": "2026-01-05",
+    "turkce_dogru": "12",
+    "turkce_yanlis": "",
+    "matematik_dogru": "12",
+    "matematik_yanlis": "",
+    "fen_dogru": "213",
+    "fen_yanlis": "",
+    "inkilap_dogru": "13",
+    "inkilap_yanlis": "",
+    "ingilizce_dogru": "121321212",
+    "ingilizce_yanlis": "",
+    "din_dogru": "1212",
+    "din_yanlis": "1",
+    "id": "record_1767641795159",
+    "type": "daily",
+    "createdAt": "2026-01-05T19:36:35.353Z"
+  },
+  {
+    "date": "2026-01-05",
+    "turkce_dogru": "1",
+    "turkce_yanlis": "123",
+    "matematik_dogru": "1",
+    "matematik_yanlis": "213",
+    "fen_dogru": "1",
+    "fen_yanlis": "123",
+    "inkilap_dogru": "1",
+    "inkilap_yanlis": "213",
+    "ingilizce_dogru": "1",
+    "ingilizce_yanlis": "123",
+    "din_dogru": "1",
+    "din_yanlis": "123",
+    "id": "record_1767641812855",
+    "type": "daily",
+    "createdAt": "2026-01-05T19:36:52.856Z"
+  }
+]

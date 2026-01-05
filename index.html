@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="tr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LGS PRO ANALYTICS v11 - Elite Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        
+        :root {
+            --bg-dark: #070b14;
+            --glass-bg: rgba(23, 32, 53, 0.8);
+            --accent-blue: #3b82f6;
+        }
+
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background: var(--bg-dark); 
+            color: #f8fafc; 
+            overflow-x: hidden; 
+        }
+
+        .glass { 
+            background: var(--glass-bg); 
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08); 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+
+        .stat-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-blue);
+        }
+
+        .chart-point { transition: all 0.3s ease; }
+        .chart-point:hover { r: 10; fill: #fff; filter: drop-shadow(0 0 15px var(--accent-blue)); cursor: pointer; }
+        
+        #chartTooltip {
+            display: none; position: absolute; background: rgba(7, 11, 20, 0.95); 
+            backdrop-filter: blur(10px); border: 1px solid var(--accent-blue);
+            padding: 16px; border-radius: 20px; font-size: 12px; z-index: 9999;
+            pointer-events: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .animate-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+    </style>
+</head>
+<body class="h-full">
+    <div id="chartTooltip"></div>
+    
+    <div id="capture-area" class="min-h-full pb-20 px-4 md:px-10">
+        <div class="fixed top-0 left-0 w-full h-full pointer-events-none opacity-20">
+            <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600 rounded-full blur-[120px]"></div>
+            <div class="absolute bottom-[-10%] right-[-10%] w-[30%] h-[40%] bg-purple-600 rounded-full blur-[120px]"></div>
+        </div>
+
+        <header class="relative py-10 flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto gap-6">
+            <div class="text-center md:text-left">
+                <div class="flex items-center gap-3 justify-center md:justify-start">
+                    <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20">
+                        <i data-lucide="activity" class="text-white w-6"></i>
+                    </div>
+                    <h1 class="text-3xl font-black tracking-tighter text-white uppercase italic">DORUK <span class="text-blue-500">PRO</span></h1>
+                </div>
+                <p class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.3em] mt-2 ml-1">LGS ANALYTICS v11.5 • ELITE EDITION</p>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <button onclick="downloadImage()" id="ssBtn" class="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 border border-white/10 transition-all">
+                    <i data-lucide="camera" class="w-4 text-blue-400"></i> EKRAN GÖRÜNTÜSÜ
+                </button>
+                <button onclick="formType='daily';showingForm=true;render()" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl font-black text-xs shadow-xl shadow-blue-600/20 flex items-center gap-2 transition-all">
+                    <i data-lucide="plus" class="w-4"></i> YENİ KAYIT
+                </button>
+            </div>
+        </header>
+
+        <div id="app" class="relative max-w-7xl mx-auto animate-in"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api/records';
+        let records = [];
+        let currentView = 'dashboard';
+        let chartMode = 'daily';
+        let showingForm = false;
+        let formType = 'daily';
+
+        const subjects = [
+            { id: 'turkce', name: 'Türkçe', color: '#3b82f6', icon: 'languages' },
+            { id: 'matematik', name: 'Matematik', color: '#ef4444', icon: 'calculator' },
+            { id: 'fen', name: 'Fen Bilimleri', color: '#22c55e', icon: 'flask-conical' },
+            { id: 'inkilap', name: 'İnkılap Tarihi', color: '#f59e0b', icon: 'history' },
+            { id: 'ingilizce', name: 'İngilizce', color: '#a855f7', icon: 'globe' },
+            { id: 'din', name: 'Din Kültürü', color: '#06b6d4', icon: 'book-text' }
+        ];
+
+        async function fetchRecords() {
+            try {
+                const res = await fetch(API_URL);
+                const result = await res.json();
+                records = result.data || [];
+                render();
+            } catch (err) { 
+                console.warn("API Bağlantısı Yok, Yerel Veri Kullanılabilir.");
+                render();
+            }
+        }
+
+        function getSummary() {
+            const todayStr = new Date().toISOString().split('T')[0];
+            let todayTotal = 0;
+            let totalCorrect = 0;
+            let totalWrong = 0;
+            let monthlyData = {};
+            let subjectStats = {};
+
+            subjects.forEach(s => subjectStats[s.id] = { correct: 0, wrong: 0 });
+
+            records.forEach(r => {
+                let rTotal = 0;
+                subjects.forEach(s => {
+                    const d = parseInt(r[`${s.id}_dogru`]) || 0;
+                    const y = parseInt(r[`${s.id}_yanlis`]) || 0;
+                    totalCorrect += d;
+                    totalWrong += y;
+                    rTotal += (d + y);
+                    subjectStats[s.id].correct += d;
+                    subjectStats[s.id].wrong += y;
+                });
+                
+                if(r.date === todayStr) todayTotal += rTotal;
+                const m = new Date(r.date).toLocaleString('tr-TR', { month: 'long' });
+                monthlyData[m] = (monthlyData[m] || 0) + rTotal;
+            });
+
+            const successRate = totalCorrect + totalWrong > 0 
+                ? ((totalCorrect / (totalCorrect + totalWrong)) * 100).toFixed(1) 
+                : 0;
+
+            return { todayTotal, totalCorrect, totalWrong, monthlyData, successRate, subjectStats };
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            const summary = getSummary();
+            if (showingForm) { app.innerHTML = renderForm(); lucide.createIcons(); return; }
+
+            app.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <div class="lg:col-span-3 space-y-6">
+                        <div class="glass p-8 rounded-[2.5rem] relative overflow-hidden group stat-card">
+                            <div class="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <i data-lucide="zap" class="w-16 h-16 text-blue-400"></i>
+                            </div>
+                            <p class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">BUGÜNKÜ VERİM</p>
+                            <div class="text-6xl font-black text-white leading-none">${summary.todayTotal}</div>
+                            <p class="text-slate-500 text-xs font-bold mt-2">Çözülen Soru</p>
+                            <div class="mt-6 h-2 w-full bg-slate-800/50 rounded-full overflow-hidden">
+                                <div class="h-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] transition-all duration-1000" style="width: ${Math.min(100, (summary.todayTotal/400)*100)}%"></div>
+                            </div>
+                        </div>
+
+                        <div class="glass p-6 rounded-[2rem] flex items-center gap-4 stat-card">
+                            <div class="w-12 h-12 rounded-2xl bg-green-500/10 flex items-center justify-center">
+                                <i data-lucide="trending-up" class="text-green-500 w-6"></i>
+                            </div>
+                            <div>
+                                <p class="text-[9px] font-black text-slate-500 uppercase">GENEL BAŞARI</p>
+                                <p class="text-xl font-black text-white">%${summary.successRate}</p>
+                            </div>
+                        </div>
+
+                        <nav class="flex flex-col gap-3">
+                            <button onclick="currentView='dashboard';render()" class="flex items-center gap-4 p-5 rounded-2xl transition-all ${currentView==='dashboard'?'glass border-blue-500 bg-blue-600/5 text-blue-400':'text-slate-500 hover:text-white'}">
+                                <i data-lucide="layout-grid" class="w-5"></i> <span class="font-bold text-sm">Dashboard</span>
+                            </button>
+                            <button onclick="currentView='exams';render()" class="flex items-center gap-4 p-5 rounded-2xl transition-all ${currentView==='exams'?'glass border-blue-500 bg-blue-600/5 text-blue-400':'text-slate-500 hover:text-white'}">
+                                <i data-lucide="award" class="w-5"></i> <span class="font-bold text-sm">Deneme Sınavları</span>
+                            </button>
+                            <button onclick="currentView='daily';render()" class="flex items-center gap-4 p-5 rounded-2xl transition-all ${currentView==='daily'?'glass border-blue-500 bg-blue-600/5 text-blue-400':'text-slate-500 hover:text-white'}">
+                                <i data-lucide="calendar-days" class="w-5"></i> <span class="font-bold text-sm">Günlük Takip</span>
+                            </button>
+                        </nav>
+                    </div>
+
+                    <div class="lg:col-span-9 space-y-8">
+                        ${currentView === 'dashboard' ? renderDashboard(summary) : renderListView()}
+                    </div>
+                </div>`;
+            lucide.createIcons();
+        }
+
+        function renderDashboard(summary) {
+            return `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="glass p-8 rounded-[2.5rem] stat-card">
+                        <h3 class="text-xs font-black text-slate-400 uppercase mb-6 flex items-center gap-2 italic">
+                            <i data-lucide="bar-chart-3" class="w-4 text-blue-500"></i> Aylık Soru Hacmi
+                        </h3>
+                        <div class="space-y-5">
+                            ${Object.entries(summary.monthlyData).length ? Object.entries(summary.monthlyData).map(([m, t]) => `
+                                <div class="group">
+                                    <div class="flex justify-between text-[10px] font-black uppercase mb-1.5 px-1">
+                                        <span class="text-slate-300">${m}</span>
+                                        <span class="text-blue-400">${t} SORU</span>
+                                    </div>
+                                    <div class="h-2.5 bg-slate-800/50 rounded-full overflow-hidden border border-white/5">
+                                        <div class="h-full bg-gradient-to-right bg-blue-600 transition-all duration-1000" style="width:${Math.min(100, (t/5000)*100)}%"></div>
+                                    </div>
+                                </div>
+                            `).join('') : '<p class="text-slate-600 italic text-sm">Henüz veri yok.</p>'}
+                        </div>
+                    </div>
+
+                    <div class="glass p-8 rounded-[2.5rem] stat-card">
+                         <h3 class="text-xs font-black text-slate-400 uppercase mb-6 flex items-center gap-2 italic">
+                            <i data-lucide="pie-chart" class="w-4 text-purple-500"></i> Ders Performansı
+                        </h3>
+                         <div class="grid grid-cols-2 gap-4">
+                            ${subjects.map(s => {
+                                const stats = summary.subjectStats[s.id];
+                                const total = stats.correct + stats.wrong;
+                                return `
+                                <div class="bg-white/5 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <i data-lucide="${s.icon}" class="w-3 h-3" style="color:${s.color}"></i>
+                                        <span class="text-[9px] font-bold uppercase text-slate-500 tracking-wider">${s.name}</span>
+                                    </div>
+                                    <div class="text-2xl font-black" style="color:${s.color}">${total}</div>
+                                    <div class="text-[9px] font-bold text-slate-400 mt-1">D: ${stats.correct} / Y: ${stats.wrong}</div>
+                                </div>`;
+                            }).join('')}
+                         </div>
+                    </div>
+                </div>
+
+                <div class="glass p-10 rounded-[3rem] stat-card relative overflow-hidden">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+                        <div>
+                            <h3 class="text-sm font-black uppercase text-white italic">Performans Eğrisi</h3>
+                            <p class="text-xs text-slate-500 font-medium">Son 12 verinin karşılaştırmalı analizi</p>
+                        </div>
+                        <div class="flex bg-slate-900/80 p-1.5 rounded-2xl border border-white/5">
+                            <button onclick="chartMode='daily';render()" class="px-6 py-2.5 rounded-xl text-[10px] font-black transition-all ${chartMode==='daily'?'bg-blue-600 text-white shadow-lg shadow-blue-600/20':'text-slate-500 hover:text-white'}">GÜNLÜK</button>
+                            <button onclick="chartMode='exam';render()" class="px-6 py-2.5 rounded-xl text-[10px] font-black transition-all ${chartMode==='exam'?'bg-purple-600 text-white shadow-lg shadow-purple-600/20':'text-slate-500 hover:text-white'}">DENEME</button>
+                        </div>
+                    </div>
+                    <div class="h-80 w-full">${renderMainChart()}</div>
+                </div>
+            `;
+        }
+
+        function renderMainChart() {
+            const data = records.filter(r => r.type === chartMode).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-12);
+            if(data.length < 2) return `<div class="h-full flex flex-col items-center justify-center text-slate-600 gap-4">
+                <i data-lucide="database-backup" class="w-12 h-12 opacity-20"></i>
+                <span class="italic font-bold text-sm tracking-widest">ANALİZ İÇİN YETERLİ VERİ BULUNAMADI</span>
+            </div>`;
+            
+            const w = 1000, h = 300;
+            const plotData = data.map(r => {
+                let total = 0;
+                let details = [];
+                subjects.forEach(s => {
+                    const d = parseInt(r[`${s.id}_dogru`]) || 0;
+                    const y = parseInt(r[`${s.id}_yanlis`]) || 0;
+                    const net = Math.max(0, d - (y / 3));
+                    const soru = d + y;
+                    if(soru > 0) {
+                        details.push({ name: s.name, color: s.color, val: chartMode === 'exam' ? net.toFixed(1) + ' Net' : soru + ' Soru' });
+                    }
+                    total += (chartMode === 'exam') ? net : soru;
+                });
+                return { total, details, label: r.exam_name || r.date };
+            });
+
+            const maxVal = Math.max(...plotData.map(p => p.total), chartMode === 'exam' ? 90 : 200) * 1.1;
+            const pts = plotData.map((p, i) => ({
+                x: i * (w/(plotData.length-1)),
+                y: h - (p.total/maxVal * (h-60)) - 30,
+                ...p
+            }));
+
+            // Yumuşak çizgi (Bezier) oluşturucu
+            let dString = `M ${pts[0].x} ${pts[0].y}`;
+            for (let i = 0; i < pts.length - 1; i++) {
+                const cp1x = pts[i].x + (pts[i+1].x - pts[i].x) / 2;
+                dString += ` C ${cp1x} ${pts[i].y}, ${cp1x} ${pts[i+1].y}, ${pts[i+1].x} ${pts[i+1].y}`;
+            }
+
+            return `
+                <svg viewBox="0 0 ${w} ${h}" class="w-full h-full overflow-visible">
+                    <defs>
+                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="${chartMode==='exam'?'#a855f7':'#3b82f6'}" stop-opacity="0.3"/>
+                            <stop offset="100%" stop-color="transparent" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="${dString} V ${h} H 0 Z" fill="url(#chartGrad)" />
+                    <path d="${dString}" fill="none" stroke="${chartMode==='exam'?'#a855f7':'#3b82f6'}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+                    ${pts.map((p)=>`
+                        <circle class="chart-point" cx="${p.x}" cy="${p.y}" r="6" fill="#070b14" stroke="${chartMode==='exam'?'#a855f7':'#3b82f6'}" stroke-width="3" 
+                        onmouseover="showAdvancedTip(event, ${JSON.stringify(p).replace(/"/g, '&quot;')})" 
+                        onmouseout="hideTip()" />
+                    `).join('')}
+                </svg>`;
+        }
+
+        function showAdvancedTip(e, data) {
+            const t = document.getElementById('chartTooltip');
+            let rows = data.details.map(d => `
+                <div class="flex justify-between gap-6 mb-2 items-center">
+                    <span class="flex items-center gap-2 font-bold text-slate-400">
+                        <span class="w-2 h-2 rounded-full" style="background:${d.color}"></span> ${d.name}
+                    </span>
+                    <span class="text-white font-black">${d.val}</span>
+                </div>
+            `).join('');
+
+            t.innerHTML = `
+                <div class="font-black text-blue-400 uppercase text-[10px] mb-3 border-b border-white/10 pb-2 flex justify-between">
+                    <span>${data.label}</span>
+                    <i data-lucide="calendar" class="w-3"></i>
+                </div>
+                <div class="min-w-[180px]">${rows}</div>
+                <div class="mt-3 pt-3 border-t border-white/10 flex justify-between font-black text-white text-sm">
+                    <span class="text-slate-500">GENEL:</span>
+                    <span class="text-blue-500">${data.total.toFixed(1)} ${chartMode==='exam'?'NET':'SORU'}</span>
+                </div>
+            `;
+            t.style.display = 'block';
+            t.style.left = (e.pageX + 20) + 'px';
+            t.style.top = (e.pageY - 50) + 'px';
+            lucide.createIcons();
+        }
+
+        function hideTip() { document.getElementById('chartTooltip').style.display = 'none'; }
+
+        function renderListView() {
+            const isExam = currentView === 'exams';
+            const filtered = records.filter(r => r.type === (isExam ? 'exam' : 'daily'));
+            return `
+                <div class="flex justify-between items-center mb-8">
+                    <div>
+                        <h2 class="text-2xl font-black uppercase italic">${isExam?'Sınav Raporları':'Çalışma Günlüğü'}</h2>
+                        <p class="text-xs text-slate-500 font-bold uppercase tracking-widest">${filtered.length} Kayıt Bulundu</p>
+                    </div>
+                    <button onclick="formType='${isExam?'exam':'daily'}';showingForm=true;render()" class="bg-white/5 hover:bg-white/10 border border-white/10 px-6 py-3 rounded-2xl font-bold text-xs transition-all">
+                        + YENİ EKLE
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 gap-4">
+                    ${filtered.length ? filtered.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r => `
+                        <div class="glass p-6 rounded-[2rem] flex justify-between items-center border-l-8 ${r.type==='exam'?'border-purple-600':'border-blue-600'} hover:scale-[1.01] transition-transform">
+                            <div class="flex items-center gap-6">
+                                <div class="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center font-black text-blue-500">
+                                    ${new Date(r.date).getDate()}
+                                </div>
+                                <div>
+                                    <h4 class="font-black text-white text-lg">${r.exam_name || 'Günlük Soru Çözümü'}</h4>
+                                    <div class="flex gap-4 mt-1">
+                                        <p class="text-[10px] text-slate-500 font-black uppercase flex items-center gap-1">
+                                            <i data-lucide="clock" class="w-3"></i> ${r.date}
+                                        </p>
+                                        <p class="text-[10px] text-blue-400 font-black uppercase flex items-center gap-1">
+                                            <i data-lucide="check-circle" class="w-3"></i> ${calculateTotal(r)} Soru
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="deleteRecord('${r.id}')" class="bg-red-500/10 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition-all group">
+                                    <i data-lucide="trash-2" class="w-5"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('') : '<div class="glass p-20 rounded-[3rem] text-center text-slate-600 font-bold italic">Kayıt bulunamadı.</div>'}
+                </div>`;
+        }
+
+        function calculateTotal(r) {
+            return subjects.reduce((a,s)=> a + (parseInt(r[`${s.id}_dogru`])||0) + (parseInt(r[`${s.id}_yanlis`])||0), 0);
+        }
+
+        function renderForm() {
+            const isExam = formType === 'exam';
+            return `
+                <div class="max-w-2xl mx-auto py-4">
+                    <form onsubmit="saveEntry(event)" class="glass p-10 rounded-[3.5rem] border-t-[12px] ${isExam?'border-purple-600':'border-blue-600'}">
+                        <div class="flex justify-between items-center mb-10">
+                            <h2 class="text-3xl font-black uppercase italic">${isExam?'Deneme Kaydı':'Soru Girişi'}</h2>
+                            <i data-lucide="${isExam?'award':'book-open'}" class="w-10 h-10 text-white/10"></i>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black text-slate-500 uppercase ml-2">TARİH</label>
+                                <input type="date" name="date" required value="${new Date().toISOString().split('T')[0]}" class="w-full bg-slate-900 border border-white/5 p-4 rounded-2xl outline-none font-bold focus:border-blue-500 transition-all text-white">
+                            </div>
+                            ${isExam ? `
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-black text-slate-500 uppercase ml-2">SINAV ADI</label>
+                                <input type="text" name="exam_name" placeholder="Örn: Özdebir-1" required class="w-full bg-slate-900 border border-white/5 p-4 rounded-2xl outline-none font-bold focus:border-purple-500 transition-all text-white">
+                            </div>` : ''}
+                        </div>
+
+                        <div class="grid grid-cols-1 gap-3 mb-10 max-h-[40vh] overflow-y-auto pr-2 custom-scroll">
+                            ${subjects.map(s => `
+                                <div class="flex items-center justify-between bg-white/5 p-5 rounded-[1.5rem] border border-white/5 group hover:bg-white/10 transition-all">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
+                                            <i data-lucide="${s.icon}" class="w-4 h-4" style="color:${s.color}"></i>
+                                        </div>
+                                        <span class="font-black text-xs uppercase text-slate-300 tracking-wider">${s.name}</span>
+                                    </div>
+                                    <div class="flex gap-3">
+                                        <input type="number" name="${s.id}_dogru" placeholder="D" class="w-20 p-3 bg-slate-950 rounded-xl text-center text-green-400 font-black border border-green-500/20 focus:border-green-500 outline-none">
+                                        <input type="number" name="${s.id}_yanlis" placeholder="Y" class="w-20 p-3 bg-slate-950 rounded-xl text-center text-red-400 font-black border border-red-500/20 focus:border-red-500 outline-none">
+                                    </div>
+                                </div>`).join('')}
+                        </div>
+
+                        <div class="flex gap-4">
+                            <button type="submit" class="flex-1 ${isExam?'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20':'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20'} py-6 rounded-[2rem] font-black text-xl shadow-xl transition-all tracking-tighter">VERİYİ İŞLE</button>
+                            <button type="button" onclick="showingForm=false;render()" class="px-10 bg-slate-800 hover:bg-slate-700 rounded-[2rem] font-bold transition-all">VAZGEÇ</button>
+                        </div>
+                    </form>
+                </div>`;
+        }
+
+        async function saveEntry(e) {
+            e.preventDefault();
+            const data = Object.fromEntries(new FormData(e.target));
+            data.id = `record_${Date.now()}`;
+            data.type = formType;
+            
+            // Yerel Depolama (Backup) ve API Simülasyonu
+            const savedRecords = JSON.parse(localStorage.getItem('lgs_records') || '[]');
+            savedRecords.push(data);
+            localStorage.setItem('lgs_records', JSON.stringify(savedRecords));
+            
+            try {
+                await fetch(API_URL, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify(data) 
+                });
+            } catch (err) { console.log("Yerel kaydedildi."); }
+            
+            records = savedRecords;
+            showingForm = false;
+            render();
+        }
+
+        async function deleteRecord(id) { 
+            if(confirm('Bu kaydı kalıcı olarak silmek istediğine emin misin?')) { 
+                records = records.filter(r => r.id !== id);
+                localStorage.setItem('lgs_records', JSON.stringify(records));
+                try {
+                    await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+                } catch(e) {}
+                render(); 
+            } 
+        }
+
+        async function downloadImage() {
+            const btn = document.getElementById('ssBtn');
+            const originalText = btn.innerHTML;
+            btn.innerText = "HAZIRLANIYOR...";
+            
+            // Görsel kalitesi için ölçeklendirme
+            const canvas = await html2canvas(document.getElementById('capture-area'), { 
+                backgroundColor: "#070b14",
+                scale: 2,
+                logging: false,
+                useCORS: true
+            });
+            
+            const a = document.createElement('a');
+            a.download = `LGS_Analiz_${new Date().toLocaleDateString()}.png`;
+            a.href = canvas.toDataURL('image/png');
+            a.click();
+            btn.innerHTML = originalText;
+        }
+
+        // Başlangıç
+        const localData = localStorage.getItem('lgs_records');
+        if(localData) records = JSON.parse(localData);
+        fetchRecords();
+    </script>
+</body>
+</html>
